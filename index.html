@@ -46,9 +46,8 @@
             gap: 20px;
             justify-content: center;
             align-items: center;
-            flex-wrap: wrap; /* allows stacking when width is small */
+            flex-wrap: wrap;
         }
-
         /* On vertical (narrow) screens, stack vertically */
         @media (max-width: 600px) {
             #currentPair {
@@ -65,27 +64,22 @@
 </head>
 <body>
 
-<h1><b style="color:#d60270;">COCK</b><b style="color:#9b4f96;">PIT</b><b style="color:#0038a8">VOTE</b></h1>
+<h1>
+  <b style="color:#d60270;">COCK</b>
+  <b style="color:#9b4f96;">PIT</b>
+  <b style="color:#0038a8">VOTE</b>
+</h1>
+
 <div id="arrayDisplay">Loading...</div>
 
 <div id="currentPair" style="display:flex; gap:20px; justify-content:left; align-items:center;">
-    <div id="leftImage" class="image-container">
-        <!-- Left image goes here -->
-    </div>
-    <div id="rightImage" class="image-container">
-        <!-- Right image goes here -->
-    </div>
+    <div id="leftImage" class="image-container"></div>
+    <div id="rightImage" class="image-container"></div>
 </div>
 
 <script>
-const K = 40;
 const socket = new WebSocket('wss://cockpitserver.onrender.com');
-let pics = [];
-let picskeys = [];
-let combs = [];
-let visited = [];
 let currentPair = null;
-let setupFinished = false;
 
 const imageDictionary = {
     1: 'kevin.jpg',
@@ -102,62 +96,30 @@ const imageDictionary = {
 
 socket.onmessage = event => {
     const data = JSON.parse(event.data);
+
     if (data.type === 'array_update') {
-        pics = data.data;
-        setupAfterLoad(); 
+        displayArray(data.data);
+    }
+
+    if (data.type === 'new_pair') {
+        currentPair = data.data;
+        renderPair(currentPair);
     }
 };
 
-socket.onopen = function () {
+socket.onopen = () => {
     socket.send(JSON.stringify({ type: 'request_array' }));
 
-    var t = setInterval(function () {
-        if (socket.readyState !== 1) {
-            clearInterval(t);
-            return;
+    // keepalive ping
+    setInterval(() => {
+        if (socket.readyState === 1) {
+            socket.send(JSON.stringify({ type: 'ping' }));
+            console.log("ping");
         }
-        socket.send(JSON.stringify({ type: 'ping' }));
-        console.log("ping");
     }, 30000);
 };
 
-function setupDefaultArray() {
-    pics = [[1,1000], [2,1000], [3,1000], [4,1000], [5,1000], [6,1000], [7,1000], [8,1000], [9,1000]];
-    socket.send(JSON.stringify({ type: 'update_array', data: pics }));
-    setupAfterLoad();
-}
-
-function setupAfterLoad() {
-    if (!pics || pics.length === 0) {
-        setupDefaultArray();
-        return;
-    }
-    picskeys = pics.map(p => p[0]);
-    combs = combinations(picskeys);
-    visited = [];
-    displayArray();
-    if (setupFinished === false) {
-        let rizzCAPTCHA = prompt("本网站受 rizzCAPTCHA 保护。请输入 Sean Combs 的别名以继续。").toLowerCase();
-        if (rizzCAPTCHA === "diddy") {
-            nextPair();
-        } else {
-            while (true) {
-                rizzCAPTCHA = prompt("您已被rizzCAPTCHA验证失败，现在您将被送往再教育营，以证明您对中共的忠诚。此次违规行为已导致您的社会信用分数被扣除50万分。请勿再次发生此类行为！请重新打开网站并重试。");
-            }
-        }
-        setupFinished = true;
-    }
-}
-
-function randint(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function combinations(array) {
-    return array.flatMap((v, i) => array.slice(i + 1).map(w => v + ' ' + w));
-}
-
-function displayArray() {
+function displayArray(pics) {
     let sorted = [...pics].sort((a, b) => b[1] - a[1]);
     const container = document.getElementById('arrayDisplay');
     container.innerHTML = "<h3>Current Rankings:</h3><ul>";
@@ -168,17 +130,8 @@ function displayArray() {
     container.innerHTML += "</ul>";
 }
 
-function nextPair() {
-    if (visited.length === combs.length) visited = [];
-    let rpics = combs[randint(0, combs.length - 1)];
-    while (visited.includes(rpics)) {
-        rpics = combs[randint(0, combs.length - 1)];
-    }
-    visited.push(rpics);
-
-    let [gA, gB] = rpics.split(" ").map(Number);
-    currentPair = { gA, gB };
-
+function renderPair(pair) {
+    const { gA, gB } = pair;
     document.getElementById('leftImage').innerHTML = `
         <img src="${imageDictionary[gA]}" alt="Image ${gA}">
         <button class="overlay-btn" onclick="handleChoice('l')">this one</button>
@@ -191,15 +144,8 @@ function nextPair() {
 
 function handleChoice(choice) {
     if (!currentPair) return;
-    let { gA, gB } = currentPair;
-    socket.send(JSON.stringify({
-        type: 'choice',
-        data: { gA, gB, choice }
-    }));
-    socket.send(JSON.stringify({ type: 'request_array' }));
-    nextPair();
+    socket.send(JSON.stringify({ type: 'choice', data: choice }));
 }
 </script>
 
 </body>
-</html>
